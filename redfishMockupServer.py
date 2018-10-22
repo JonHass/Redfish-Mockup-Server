@@ -430,6 +430,73 @@ class RfMockupServer(BaseHTTPRequestHandler):
                                     sys.stdout.flush()
                                 self.send_response(204)
                                 self.event_id = self.event_id + 1
+                    elif 'TelemetryService/Actions/TelemetryService.SubmitTestMetricReport' in rpath:
+                        eventpath = os.path.join(apath, 'redfish/v1/EventService/Subscriptions', 'index.json')
+                        if self.server.shortForm:
+                            eventpath = eventpath.replace('redfish/v1/', '')
+                        success, jsonData = get_cached_link(eventpath)
+                        print(eventpath)
+                        if not success:
+                            # Eventing not supported
+                            self.send_response(404)
+                        else:
+                            # Check if all of the parameters are given
+                            if ('Name' not in dataa) or ('Value' not in dataa):
+                                self.send_response(400)
+                            else:
+                                print(jsonData.get('Members'))
+                                for member in jsonData.get('Members', []):
+                                    entry = member['@odata.id']
+                                    if self.server.shortForm:
+                                        entry = entry.replace('redfish/v1/', '')
+                                    entrypath = os.path.join(apath + entry, 'index.json')
+                                    success, jsonData = get_cached_link(entrypath)
+                                    print(apath)
+                                    print("entrypath", entrypath)
+                                    if not success:
+                                        print('No such resource')
+                                    else:
+                                        # Sanity check the subscription for required properties
+                                        if ('Destination' in jsonData) and ('EventTypes' in jsonData):
+                                            print('Target', jsonData['Destination'])
+
+                                            # If the EventType in the request is one of interest to the subscriber, build an event payload
+                                            event_payload = {}
+                                            value_list = []
+                                            event_payload[
+                                                '@Redfish.Copyright'] = 'Copyright 2014-2016 Distributed Management Task Force, Inc. (DMTF). All rights reserved.'
+                                            event_payload['@odata.context'] = '/redfish/v1/$metadata#MetricReport.MetricReport'
+                                            event_payload['@odata.type'] = '#MetricReport.v1_0_0.MetricReport'
+                                            event_payload['@odata.id'] = '/redfish/v1/TelemetryService/MetricReports/' + dataa[
+                                                'Name']
+                                            event_payload['Id'] = dataa['Name']
+                                            event_payload['Name'] = dataa['Name']
+                                            event_payload['EventTimestamp'] = dataa['EventTimestamp']
+                                            event_payload['MetricReportDefinition'] = {
+                                                "@odata.id": "/redfish/v1/TelemetryService/MetricReportDefinitions/" + dataa[
+                                                    'Name']}
+                                            for tup in dataa['Value']:
+                                                item = {}
+                                                item['MemberID'] = tup[0]
+                                                item['MetricValue'] = tup[1]
+                                                item['TimeStamp'] = tup[2]
+                                                if len(tup) == 4:
+                                                    item['MetricProperty'] = tup[3]
+                                                value_list.append(item)
+                                            event_payload['MetricValues'] = value_list
+                                            print(event_payload)
+                                            http_headers = {}
+                                            http_headers['Content-Type'] = 'application/json'
+
+                                            try:
+                                                r = requests.post(jsonData['Destination'], timeout=20,
+                                                                  data=json.dumps(event_payload), headers=http_headers)
+                                                print('post complete', r.status_code)
+                                            except Exception as e:
+                                                print('post error', str(e))
+                                    sys.stdout.flush()
+                                self.send_response(204)
+                                self.event_id = self.event_id + 1
                     else:
                         self.send_response(405)
 
