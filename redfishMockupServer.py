@@ -247,6 +247,7 @@ class RfMockupServer(BaseHTTPRequestHandler):
                     report_path = self.construct_path(report_path, 'index.json')
                     success, collection_payload = self.get_cached_link(report_path)
 
+
                     if not success:
                         collection_payload = {'Members': []}
                         collection_payload['@odata.context'] = '/redfish/v1/$metadata#MetricReportCollection.MetricReportCollection'
